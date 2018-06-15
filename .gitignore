@@ -1,0 +1,22 @@
+# IntelliJ IDEA
+.idea/
+.idea_modules/
+*.iws
+*.iml
+*.ipr
+/out/
+
+# sbt
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+.history
+.cache
+.lib/
+
+# Scala
+*.class
+*.log
