@@ -2,6 +2,7 @@ package org.penny_craal.mairion
 
 import cats.data.{EitherT, NonEmptyList}
 import cats.effect.IO
+import cats.~>
 import io.circe.{Encoder, Json}
 import io.circe.syntax._
 import io.circe.generic.auto._
@@ -10,7 +11,7 @@ import org.http4s.headers.`WWW-Authenticate`
 import org.http4s.{AuthedRequest, AuthedService, Challenge, Headers, Response, Status}
 import org.penny_craal.mairion.Request.Identified
 import org.penny_craal.mairion.resourcerepository.MairionError.id
-import org.penny_craal.mairion.resourcerepository.{FallibleIO, MairionError, RRIO, RRResult, ResourceRepository}
+import org.penny_craal.mairion.resourcerepository._
 import org.penny_craal.mairion.representations.{IdNumber, Resource, OperationType => OT}
 
 /** Provides Blaze services for various resources, a function for creating them, and various default functions for
@@ -56,6 +57,7 @@ package object services {
     */
   def makeResourceService[R <: Resource.Plain](
     httpRequestParser: HttpRequestParser[R],
+    compiler: ResourceRepository ~> FallibleIO,
     apiRequestProcessor: ApiRequestProcessor[R] = PartialFunction.empty,
     successResponder: SuccessResponder[R] = defaultSuccessResponder[R],
     errorResponder: ErrorResponder = defaultErrorResponder
@@ -64,8 +66,8 @@ package object services {
       val responseOrError: FallibleIO[Response[IO]] = for {
         request <- httpRequestParser(httpRequest)
         idRequest = Request.Identified(httpRequest.authInfo, request)
-        _ <- verifyRequestIsAuthorized(idRequest)
-        results <- processRequest(apiRequestProcessor, idRequest)
+        _ <- verifyRequestIsAuthorized(idRequest, compiler)
+        results <- processRequest(apiRequestProcessor, idRequest, compiler)
         response <- successResponder(results, request, resourceEncoder)
       } yield response
       responseOrError valueOrF errorResponder
@@ -76,9 +78,12 @@ package object services {
     * @tparam R The type of result the request would get.
     * @return A successful FallibleIO of Unit if the request passed authorization, a failed one if not.
     */
-  private def verifyRequestIsAuthorized[R <: Resource.Plain](idRequest: Identified[Request[R]]): FallibleIO[Unit] = {
+  private def verifyRequestIsAuthorized[R <: Resource.Plain](
+    idRequest: Identified[Request[R]],
+    compiler: ResourceRepository ~> FallibleIO
+  ): FallibleIO[Unit] = {
     val isAuthorizedFtRrio = ResourceRepositoryAuth.isRequestAuthorized(idRequest)
-    val isAuthorizedFio = RrioSharedStateInterpreter.compileFallibleT(isAuthorizedFtRrio)
+    val isAuthorizedFio = compileFallibleT(compiler)(isAuthorizedFtRrio)
     isAuthorizedFio subflatMap {
       case true => Right(())
       case false => Left(MairionError.unauthorized)
@@ -93,11 +98,12 @@ package object services {
     */
   private def processRequest[R <: Resource.Plain](
     processor: ApiRequestProcessor[R],
-    idRequest: Identified[Request[R]]
+    idRequest: Identified[Request[R]],
+    compiler: ResourceRepository ~> FallibleIO
   ): FallibleIO[RRResult[R]] = {
     val totalProcessor = processor orElse defaultProcessor
     val resultRrio = totalProcessor(idRequest)
-    RrioSharedStateInterpreter.compile(resultRrio)
+    compile(compiler)(resultRrio)
   }
 
   /** Returns a [[SuccessResponder]] for the given type, which wraps up the result in a HTTP response with the

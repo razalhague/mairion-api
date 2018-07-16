@@ -22,21 +22,4 @@ object RrioSharedStateInterpreter extends (ResourceRepository ~> FallibleIO) {
       valueF
     }
   })
-
-  /** Compiles a [[resourcerepository.RRIO]] value into a [[resourcerepository.FallibleIO]] value.
-    * @param a The monadic value.
-    * @tparam A The type of value contained by the monad.
-    * @return The value wrapped in [[resourcerepository.FallibleIO]].
-    */
-  def compile[A](a: RRIO[A]): FallibleIO[A] =
-    a foldMap this
-
-  /** Compiles a [[resourcerepository.RRIO]] value that uses [[resourcerepository.FallibleT]] error handling into a
-    * [[resourcerepository.FallibleIO]] value.
-    * @param a The monadic value.
-    * @tparam A The type of value contained by the monad.
-    * @return The value wrapped in [[resourcerepository.FallibleIO]], with the error handling merged.
-    */
-  def compileFallibleT[A](a: FallibleT[RRIO, A]): FallibleIO[A] =
-    compile(a.value) subflatMap (x => x)
 }

@@ -3,6 +3,7 @@ package services
 
 import cats.data.EitherT
 import cats.effect.IO
+import cats.~>
 import org.http4s.AuthedService
 import org.penny_craal.mairion.dslextensions._
 import org.penny_craal.mairion.Request._
@@ -52,6 +53,6 @@ object UserService extends ResourceService {
 
   override val path = "/users"
 
-  override val service: AuthedService[Option[IdNumber], IO] =
-    makeResourceService[User](parseHttpRequest, preProcessor andThen defaultProcessor[User])
+  override def service(compiler: ResourceRepository ~> FallibleIO): AuthedService[Option[IdNumber], IO] =
+    makeResourceService[User](parseHttpRequest, compiler, preProcessor andThen defaultProcessor[User])
 }

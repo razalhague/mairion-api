@@ -2,6 +2,7 @@ package org.penny_craal.mairion
 
 import cats.data.{EitherT, Kleisli}
 import cats.effect.IO
+import cats.~>
 import org.http4s.{AuthedService, Request => HttpRequest}
 import org.http4s.headers.Authorization
 import org.http4s.server.AuthMiddleware
@@ -20,13 +21,15 @@ object Authentication {
   /** Returns the user's ID number if the request's authentication information is valid, None if no authentication
     * information, and error if something went wrong.
     */
-  private val authUser: Kleisli[IO, HttpRequest[IO], Fallible[Option[IdNumber]]] = Kleisli { request =>
+  private def authUser(interpreter: ResourceRepository ~> FallibleIO)
+  : Kleisli[IO, HttpRequest[IO], Fallible[Option[IdNumber]]]
+  = Kleisli { request =>
     val userId: FallibleIO[Option[IdNumber]] = request.headers get Authorization match {
       case None => EitherT.rightT(None)
       case Some(header) => for {
         credentials <- getCredentialsFromHeader(header)
         idFrrio = ResourceRepositoryAuth.getUserIdIfCredentialsAuthenticate(credentials)
-        idOpt <- RrioSharedStateInterpreter.compileFallibleT(idFrrio)
+        idOpt <- compileFallibleT(interpreter)(idFrrio)
       } yield idOpt
     }
     userId.value
@@ -43,8 +46,13 @@ object Authentication {
     case request => services.defaultErrorResponder(request.authInfo)
   }
 
-  /** Turns an [[https://http4s.org/v0.18/api/org/http4s/authedservice$ AuthedService]] into an
+  /** Returns an authentication middleware that turns an
+    * [[https://http4s.org/v0.18/api/org/http4s/authedservice$ AuthedService]] into an
     * [[https://http4s.org/v0.18/api/org/http4s/httpservice$ HttpService]].
+    * @param interpreter An interpreter for compiling RRIO values into FallibleIO values.
+    * @return The middleware.
     */
-  val middleware: AuthMiddleware[IO, Option[IdNumber]] = AuthMiddleware(authUser, authenticationFailureService)
+  def middleware(interpreter: ResourceRepository ~> FallibleIO): AuthMiddleware[IO, Option[IdNumber]] =
+    AuthMiddleware(authUser(interpreter), authenticationFailureService)
+
 }

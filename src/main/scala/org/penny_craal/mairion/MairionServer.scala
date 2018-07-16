@@ -16,10 +16,12 @@ object MairionServer extends StreamApp[IO] {
   )
 
   def stream(args: List[String], requestShutdown: IO[Unit]): fs2.Stream[IO, StreamApp.ExitCode] = {
+    val interpreter = RrioSharedStateInterpreter
     val baseBlaze = BlazeBuilder[IO].bindHttp(8080, "0.0.0.0")
-    val blazeWithServices = services.foldLeft(baseBlaze)((blaze, unauthdService) =>
-      blaze.mountService(Authentication.middleware(unauthdService.service), unauthdService.path)
-    )
+    val blazeWithServices = services.foldLeft(baseBlaze) { (blaze, unauthdService) =>
+      val service = Authentication.middleware(interpreter)(unauthdService.service(interpreter))
+      blaze.mountService(service, unauthdService.path)
+    }
     blazeWithServices.serve
   }
 }

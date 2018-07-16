@@ -3,10 +3,11 @@ package services
 
 import cats.data.EitherT
 import cats.effect.IO
+import cats.~>
 import org.http4s.AuthedService
 import org.penny_craal.mairion.dslextensions._
 import org.penny_craal.mairion.Request._
-import org.penny_craal.mairion.resourcerepository.{Filter, MairionError, RRIO, RRResult, ResourceRepository}
+import org.penny_craal.mairion.resourcerepository._
 import org.penny_craal.mairion.representations.{Delta, Group, IdNumber, Permission, PermissionScope, Workspace, WorkspaceMembership, OperationType => OT, ResourceType => RT}
 import org.penny_craal.mairion.representations.json.implicits._
 
@@ -64,6 +65,6 @@ object WorkspaceService extends ResourceService {
 
   override val path = "/workspaces"
 
-  override val service: AuthedService[Option[IdNumber], IO] =
-    makeResourceService[Workspace](parseHttpRequest, processor)
+  override def service(compiler: ResourceRepository ~> FallibleIO): AuthedService[Option[IdNumber], IO] =
+    makeResourceService[Workspace](parseHttpRequest, compiler, processor)
 }
